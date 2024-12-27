@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>방위각 및 거리 계산기</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <h1>방위각 및 거리 계산기</h1>
+    <label for="x1">첫 번째 점의 x좌표:</label>
+    <input type="number" id="x1" step="any"><br>
+    <label for="y1">첫 번째 점의 y좌표:</label>
+    <input type="number" id="y1" step="any"><br>
+    <label for="x2">두 번째 점의 x좌표:</label>
+    <input type="number" id="x2" step="any"><br>
+    <label for="y2">두 번째 점의 y좌표:</label>
+    <input type="number" id="y2" step="any"><br>
+    <button onclick="calculatePolar()">계산</button>
+    <p id="result"></p>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>

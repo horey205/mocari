@@ -1,0 +1,52 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Coordinate Calculator</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Coordinate Calculator</h1>
+
+
+        <div class="input-group">
+            <h2>Origin Point</h2>
+            <label for="originX">X Coordinate:</label>
+            <input type="number" id="originX" value="0">
+            <label for="originY">Y Coordinate:</label>
+            <input type="number" id="originY" value="0">
+        </div>
+
+
+        <div id="pointsContainer">
+            <div class="point-input">
+                <h2>Point 1</h2>
+                <label for="bearingDeg1">Bearing (Degrees):</label>
+                <input type="number" id="bearingDeg1" value="0" min="0" max="359">
+                <label for="bearingMin1">Minutes:</label>
+                <input type="number" id="bearingMin1" value="0" min="0" max="59">
+                <label for="bearingSec1">Seconds:</label>
+                <input type="number" id="bearingSec1" value="0" min="0" max="59">
+                <label for="distance1">Distance:</label>
+                <input type="number" id="distance1" value="0">
+            </div>
+        </div>
+
+
+        <button id="addPoint">Add Another Point</button>
+        <button id="calculateBtn">Calculate Coordinates</button>
+
+
+        <div class="results">
+            <h2>Calculated Coordinates</h2>
+            <div id="calculatedResults">
+                </div>
+        </div>
+    </div>
+
+
+    <script src="script.js"></script>
+</body>
+</html>

@@ -1,0 +1,31 @@
+name: Daily School Lunch Notification
+
+on:
+  schedule:
+    # UTC 02:30 -> KST 11:30 (9 hours difference)
+    # Runs at 11:30 AM KST on Monday through Friday
+    - cron: '30 2 * * 1-5'
+  workflow_dispatch: # Allows manual run from GitHub UI
+
+jobs:
+  send-menu:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+
+    - name: Install dependencies
+      run: |
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+    - name: Run Crawler
+      env:
+        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      run: python menu_crawler.py

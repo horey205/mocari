@@ -3,7 +3,6 @@ import requests
 import datetime
 import urllib3
 import ssl
-import sys
 from requests.adapters import HTTPAdapter
 from urllib3.poolmanager import PoolManager
 from urllib3.util import ssl_
@@ -17,7 +16,12 @@ TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID')
 # 신구대학교 API URL
 API_URL = "https://www.shingu.ac.kr/ajaxf/FR_BST_SVC/BistroCarteInfo.do"
 MENU_ID = "1630"
-BISTRO_SEQ = "5" # 5: 미래창의관 학생식당 (기본값)
+
+# 식당 정보
+BISTROS = [
+    {"name": "교직원식당", "seq": "6"}, # 1. 교직원식당부터
+    {"name": "학생식당(미래창의관)", "seq": "5"} # 2. 학생식당
+]
 
 # SSL 경고 무시
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -27,7 +31,6 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 # -----------------------------------------------------------------------------
 class LegacySSLAdapter(HTTPAdapter):
     def init_poolmanager(self, connections, maxsize, block=False):
-        # 학교 사이트 등의 구형 SSL 호환성을 위해 보안 레벨 낮춤
         ctx = ssl_.create_urllib3_context(ciphers='DEFAULT:@SECLEVEL=1')
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
@@ -54,7 +57,7 @@ def send_telegram_message(message):
     payload = {
         'chat_id': TELEGRAM_CHAT_ID,
         'text': message,
-        'parse_mode': 'HTML' # HTML 태그 사용 가능
+        'parse_mode': 'HTML'
     }
     try:
         response = requests.post(url, json=payload, timeout=10)
@@ -63,21 +66,19 @@ def send_telegram_message(message):
     except Exception as e:
         print(f"텔레그램 메시지 전송 실패: {e}")
 
-def get_menu_data():
-    """API를 통해 이번 주 식단 데이터를 가져옴"""
+def get_menu_data(seq):
+    """API를 통해 특정 식당의 이번 주 식단 데이터를 가져옴"""
     # 이번 주 월요일, 금요일 계산
     today = datetime.date.today()
     monday = today - datetime.timedelta(days=today.weekday())
-    friday = monday + datetime.timedelta(days=6) # 넉넉하게 일요일까지 포함해도 됨
+    friday = monday + datetime.timedelta(days=6)
     
     start_day_str = monday.strftime("%Y.%m.%d")
     end_day_str = friday.strftime("%Y.%m.%d")
     
-    print(f"식단 데이터 요청: {start_day_str} ~ {end_day_str}")
-
     payload = {
         'MENU_ID': MENU_ID,
-        'BISTRO_SEQ': BISTRO_SEQ,
+        'BISTRO_SEQ': seq,
         'START_DAY': start_day_str,
         'END_DAY': end_day_str
     }
@@ -90,42 +91,34 @@ def get_menu_data():
         response.raise_for_status()
         return response.json()
     except Exception as e:
-        print(f"API 호출 실패: {e}")
+        print(f"API 호출 실패 (SEQ {seq}): {e}")
         return None
 
 def format_menu(menu_item):
     """메뉴 아이템을 보기 좋은 텍스트로 변환"""
-    # 구조: CARTE1_NM (제목), CARTE1_CONT (내용)
     message_lines = []
     
-    # 코너 1
-    if menu_item.get('CARTE1_NM'):
-        title = menu_item.get('CARTE1_NM', '').strip()
-        content = menu_item.get('CARTE1_CONT', '').strip()
-        message_lines.append(f"<b>[ {title} ]</b>")
-        if content:
-            message_lines.append(content)
-        message_lines.append("") # 공백
+    # 1~6 코너까지 있을 수 있음 (학생식당은 3개였지만, 교직원은 모름)
+    # 일반적인 패턴인 CARTE1 ~ CARTE6 확인
+    found_any = False
+    
+    for i in range(1, 7):
+        nm_key = f'CARTE{i}_NM'
+        cont_key = f'CARTE{i}_CONT'
         
-    # 코너 2
-    if menu_item.get('CARTE2_NM'):
-        title = menu_item.get('CARTE2_NM', '').strip()
-        content = menu_item.get('CARTE2_CONT', '').strip()
-        message_lines.append(f"<b>[ {title} ]</b>")
-        if content:
-            message_lines.append(content)
-        message_lines.append("")
-
-    # 코너 3
-    if menu_item.get('CARTE3_NM'):
-        title = menu_item.get('CARTE3_NM', '').strip()
-        content = menu_item.get('CARTE3_CONT', '').strip()
-        message_lines.append(f"<b>[ {title} ]</b>")
-        if content:
-            message_lines.append(content)
+        if menu_item.get(nm_key):
+            found_any = True
+            title = menu_item.get(nm_key, '').strip()
+            content = menu_item.get(cont_key, '').strip()
             
-    if not message_lines:
-        return "등록된 메뉴가 없습니다."
+            # 제목에 불필요한 태그/공백 제거
+            message_lines.append(f"<b>🔸 {title}</b>")
+            if content:
+                message_lines.append(content)
+            message_lines.append("") # 공백
+            
+    if not found_any:
+        return "🍽 등록된 메뉴가 없습니다."
         
     return "\n".join(message_lines)
 
@@ -133,51 +126,60 @@ def main():
     print("학교 식단 크롤러 시작")
     
     today = datetime.date.today()
-    # today_str: API 데이터의 STD_DT 포맷과 맞춤 (YYYYMMDD)
     today_key = today.strftime("%Y%m%d")
     display_date = today.strftime("%Y년 %m월 %d일 (%a)")
     
-    json_data = get_menu_data()
-    
-    if not json_data:
-        send_telegram_message(f"[{display_date}] 식단 데이터를 가져오는데 실패했습니다.")
-        return
+    final_message = f"🍱 <b>신구대학교 오늘의 학식</b>\n{display_date}\n\n"
+    has_menu_today = False
 
-    # JSON 구조 대응 (list 또는 dict)
-    items = []
-    if isinstance(json_data, dict) and 'data' in json_data:
-        items = json_data['data']
-    elif isinstance(json_data, list):
-        items = json_data
-    else:
-        print(f"알 수 없는 JSON 구조: {type(json_data)}")
-        send_telegram_message(f"[{display_date}] 식단 데이터 구조가 변경되었습니다.")
-        return
-
-    # 오늘 메뉴 찾기
-    todays_menu = None
-    for item in items:
-        # STD_DT가 YYYYMMDD 형태라고 가정 (snippet 참고: "20260119")
-        # 혹시 STD_YM과 STD_DD로 되어 있을 수도 있음.
-        item_date = item.get('STD_DT')
-        if not item_date:
-            # 대체: YM.DD 형태 조합
-            ym = item.get('STD_YM', '').replace('.', '')
-            dd = item.get('STD_DD', '')
-            if ym and dd:
-                item_date = f"{ym}{dd}"
+    for bistro in BISTROS:
+        bistro_name = bistro['name']
+        bistro_seq = bistro['seq']
         
-        if item_date == today_key:
-            todays_menu = item
-            break
-    
-    if todays_menu:
-        menu_text = format_menu(todays_menu)
-        final_msg = f"🍱 <b>신구대학교 오늘의 학식</b>\n{display_date}\n\n{menu_text}"
-        send_telegram_message(final_msg)
-    else:
-        final_msg = f"🍱 <b>신구대학교 오늘의 학식</b>\n{display_date}\n\n오늘은 운영하는 식단이 없거나 데이터가 없습니다."
-        send_telegram_message(final_msg)
+        print(f"[{bistro_name}] 데이터 가져오는 중...")
+        json_data = get_menu_data(bistro_seq)
+        
+        menu_content = "🔒 운영 정보 없음"
+        
+        if json_data:
+            items = []
+            if isinstance(json_data, dict) and 'data' in json_data:
+                items = json_data['data']
+            elif isinstance(json_data, list):
+                items = json_data
+            
+            # 오늘 메뉴 찾기
+            todays_item = None
+            for item in items:
+                item_date = item.get('STD_DT')
+                if not item_date:
+                    ym = item.get('STD_YM', '').replace('.', '')
+                    dd = item.get('STD_DD', '')
+                    if ym and dd:
+                        item_date = f"{ym}{dd}"
+                
+                if item_date == today_key:
+                    todays_item = item
+                    break
+            
+            if todays_item:
+                menu_content = format_menu(todays_item)
+                if "등록된 메뉴가 없습니다" not in menu_content:
+                    has_menu_today = True
+            else:
+                menu_content = "❌ 오늘은 운영하지 않거나 식단 데이터가 없습니다."
+        
+        # 메시지 합치기
+        # 아이콘 추가: 교직원(🏫), 학생(🎓)
+        icon = "🏫" if "교직원" in bistro_name else "🎓"
+        final_message += f"{icon} <b>{bistro_name}</b>\n"
+        final_message += f"{menu_content}\n"
+        final_message += "-" * 15 + "\n\n"
+
+    # 메시지 전송 (메뉴가 하나라도 있거나, 아예 없어도 안내는 전송)
+    # 주말 등 모두 닫았을 때는 "❌ 오늘은 운영하지 않습니다" 하나만 보내는 게 깔끔할 수 있음
+    # 하지만 사용자 요청 구성을 유지.
+    send_telegram_message(final_message.strip())
 
 if __name__ == "__main__":
     main()

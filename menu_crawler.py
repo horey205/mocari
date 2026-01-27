@@ -1,3 +1,4 @@
+import sys
 import os
 import requests
 import datetime
@@ -6,6 +7,13 @@ import ssl
 from requests.adapters import HTTPAdapter
 from urllib3.poolmanager import PoolManager
 from urllib3.util import ssl_
+
+# Windows terminal encoding fix
+if sys.stdout.encoding != 'utf-8':
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+    except AttributeError:
+        pass
 
 # -----------------------------------------------------------------------------
 # 설정 / Configuration
@@ -49,7 +57,11 @@ def send_telegram_message(message):
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
         print("[Warn] 텔레그램 토큰이 없어 메시지를 출력만 합니다.")
         print("---------------------------------------------------")
-        print(message)
+        try:
+            print(message)
+        except UnicodeEncodeError:
+            # Fallback: print with replacements for characters terminal can't handle
+            print(message.encode(sys.stdout.encoding, errors='replace').decode(sys.stdout.encoding))
         print("---------------------------------------------------")
         return
 

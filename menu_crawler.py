@@ -72,8 +72,8 @@ def send_telegram_message(message):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {
         'chat_id': TELEGRAM_CHAT_ID,
-        'text': message,
-        'parse_mode': 'HTML'
+        'text': message
+        # 'parse_mode': 'HTML'  <-- 에러 방지를 위해 제거
     }
     try:
         response = requests.post(url, json=payload, timeout=10)
@@ -130,9 +130,10 @@ def format_menu(menu_item):
             safe_title = html.escape(title)
             safe_content = html.escape(content)
             
-            message_lines.append(f"<b>🔸 {safe_title}</b>")
-            if safe_content:
-                message_lines.append(safe_content)
+            # HTML 태그 제거 및 텍스트만 사용
+            message_lines.append(f"🔸 {title}")
+            if content:
+                message_lines.append(content)
             message_lines.append("")
             
     if not found_any:
@@ -147,7 +148,7 @@ def main():
     today_key = kst_now.strftime("%Y%m%d")
     display_date = kst_now.strftime("%Y년 %m월 %d일 (%a)")
     
-    final_message = f"🍱 <b>신구대학교 오늘의 학식</b>\n{display_date}\n\n"
+    final_message = f"🍱 신구대학교 오늘의 학식\n{display_date}\n\n"
 
     for bistro in BISTROS:
         bistro_name = bistro['name']
@@ -185,7 +186,7 @@ def main():
             else:
                 menu_content = "❌ 오늘은 운영하지 않거나 식단 데이터가 없습니다."
         
-        final_message += f"{bistro_icon} <b>{bistro_name}</b>\n"
+        final_message += f"{bistro_icon} {bistro_name}\n"
         final_message += f"{menu_content}\n"
         final_message += "━━━━━━━━━━━━━━━\n\n"
 

@@ -121,8 +121,8 @@ def format_menu(menu_item):
         nm_key = f'CARTE{i}_NM'
         cont_key = f'CARTE{i}_CONT'
         
-        title = menu_item.get(nm_key, '').strip()
-        content = menu_item.get(cont_key, '').strip()
+        title = (menu_item.get(nm_key) or '').strip()
+        content = (menu_item.get(cont_key) or '').strip()
         
         if title:
             found_any = True

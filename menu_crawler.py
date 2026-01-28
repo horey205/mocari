@@ -19,8 +19,9 @@ if sys.stdout.encoding != 'utf-8':
 # -----------------------------------------------------------------------------
 # 설정 / Configuration
 # -----------------------------------------------------------------------------
-TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
-TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID')
+# 공백 제거 (.strip()) 추가
+TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '').strip()
+TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID', '').strip()
 
 # 신구대학교 API URL
 API_URL = "https://www.shingu.ac.kr/ajaxf/FR_BST_SVC/BistroCarteInfo.do"
@@ -81,6 +82,10 @@ def send_telegram_message(message):
         print("텔레그램 메시지 전송 성공")
     except Exception as e:
         print(f"텔레그램 메시지 전송 실패: {e}")
+        # 진짜 에러 원인 출력 (중요)
+        if 'response' in locals():
+            print(f"응답 내용: {response.text}")
+        
         # GitHub Actions에서 실패로 표시되도록 에러 코드 반환
         sys.exit(1)
 

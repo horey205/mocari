@@ -4,6 +4,7 @@ import requests
 import datetime
 import urllib3
 import ssl
+import html
 from requests.adapters import HTTPAdapter
 from urllib3.poolmanager import PoolManager
 from urllib3.util import ssl_
@@ -27,8 +28,8 @@ MENU_ID = "1630"
 
 # 식당 정보
 BISTROS = [
-    {"name": "교직원식당", "seq": "6"}, # 1. 교직원식당부터
-    {"name": "학생식당(미래창의관)", "seq": "5"} # 2. 학생식당
+    {"name": "교직원식당", "seq": "6", "icon": "🏫"},
+    {"name": "학생식당(미래창의관)", "seq": "5", "icon": "🎓"}
 ]
 
 # SSL 경고 무시
@@ -52,6 +53,10 @@ class LegacySSLAdapter(HTTPAdapter):
 # -----------------------------------------------------------------------------
 # Main Functions
 # -----------------------------------------------------------------------------
+def get_kst_now():
+    """한국 시간(KST) 현재 시간 반환"""
+    return datetime.datetime.utcnow() + datetime.timedelta(hours=9)
+
 def send_telegram_message(message):
     """텔레그램 메시지 전송"""
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
@@ -60,7 +65,6 @@ def send_telegram_message(message):
         try:
             print(message)
         except UnicodeEncodeError:
-            # Fallback: print with replacements for characters terminal can't handle
             print(message.encode(sys.stdout.encoding, errors='replace').decode(sys.stdout.encoding))
         print("---------------------------------------------------")
         return
@@ -77,11 +81,13 @@ def send_telegram_message(message):
         print("텔레그램 메시지 전송 성공")
     except Exception as e:
         print(f"텔레그램 메시지 전송 실패: {e}")
+        # GitHub Actions에서 실패로 표시되도록 에러 코드 반환
+        sys.exit(1)
 
 def get_menu_data(seq):
     """API를 통해 특정 식당의 이번 주 식단 데이터를 가져옴"""
-    # 이번 주 월요일, 금요일 계산
-    today = datetime.date.today()
+    # KST 기준 날짜 계산
+    today = get_kst_now().date()
     monday = today - datetime.timedelta(days=today.weekday())
     friday = monday + datetime.timedelta(days=6)
     
@@ -109,25 +115,25 @@ def get_menu_data(seq):
 def format_menu(menu_item):
     """메뉴 아이템을 보기 좋은 텍스트로 변환"""
     message_lines = []
-    
-    # 1~6 코너까지 있을 수 있음 (학생식당은 3개였지만, 교직원은 모름)
-    # 일반적인 패턴인 CARTE1 ~ CARTE6 확인
     found_any = False
     
     for i in range(1, 7):
         nm_key = f'CARTE{i}_NM'
         cont_key = f'CARTE{i}_CONT'
         
-        if menu_item.get(nm_key):
+        title = menu_item.get(nm_key, '').strip()
+        content = menu_item.get(cont_key, '').strip()
+        
+        if title:
             found_any = True
-            title = menu_item.get(nm_key, '').strip()
-            content = menu_item.get(cont_key, '').strip()
+            # HTML 특수문자 이스케이프 (텔레그램 API 오류 방지)
+            safe_title = html.escape(title)
+            safe_content = html.escape(content)
             
-            # 제목에 불필요한 태그/공백 제거
-            message_lines.append(f"<b>🔸 {title}</b>")
-            if content:
-                message_lines.append(content)
-            message_lines.append("") # 공백
+            message_lines.append(f"<b>🔸 {safe_title}</b>")
+            if safe_content:
+                message_lines.append(safe_content)
+            message_lines.append("")
             
     if not found_any:
         return "🍽 등록된 메뉴가 없습니다."
@@ -137,16 +143,16 @@ def format_menu(menu_item):
 def main():
     print("학교 식단 크롤러 시작")
     
-    today = datetime.date.today()
-    today_key = today.strftime("%Y%m%d")
-    display_date = today.strftime("%Y년 %m월 %d일 (%a)")
+    kst_now = get_kst_now()
+    today_key = kst_now.strftime("%Y%m%d")
+    display_date = kst_now.strftime("%Y년 %m월 %d일 (%a)")
     
     final_message = f"🍱 <b>신구대학교 오늘의 학식</b>\n{display_date}\n\n"
-    has_menu_today = False
 
     for bistro in BISTROS:
         bistro_name = bistro['name']
         bistro_seq = bistro['seq']
+        bistro_icon = bistro['icon']
         
         print(f"[{bistro_name}] 데이터 가져오는 중...")
         json_data = get_menu_data(bistro_seq)
@@ -176,22 +182,15 @@ def main():
             
             if todays_item:
                 menu_content = format_menu(todays_item)
-                if "등록된 메뉴가 없습니다" not in menu_content:
-                    has_menu_today = True
             else:
                 menu_content = "❌ 오늘은 운영하지 않거나 식단 데이터가 없습니다."
         
-        # 메시지 합치기
-        # 아이콘 추가: 교직원(🏫), 학생(🎓)
-        icon = "🏫" if "교직원" in bistro_name else "🎓"
-        final_message += f"{icon} <b>{bistro_name}</b>\n"
+        final_message += f"{bistro_icon} <b>{bistro_name}</b>\n"
         final_message += f"{menu_content}\n"
-        final_message += "-" * 15 + "\n\n"
+        final_message += "━━━━━━━━━━━━━━━\n\n"
 
-    # 메시지 전송 (메뉴가 하나라도 있거나, 아예 없어도 안내는 전송)
-    # 주말 등 모두 닫았을 때는 "❌ 오늘은 운영하지 않습니다" 하나만 보내는 게 깔끔할 수 있음
-    # 하지만 사용자 요청 구성을 유지.
     send_telegram_message(final_message.strip())
 
 if __name__ == "__main__":
     main()
+

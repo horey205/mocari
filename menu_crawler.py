@@ -5,6 +5,7 @@ import datetime
 import urllib3
 import ssl
 import html
+import json
 from requests.adapters import HTTPAdapter
 from urllib3.poolmanager import PoolManager
 from urllib3.util import ssl_
@@ -19,7 +20,6 @@ if sys.stdout.encoding != 'utf-8':
 # -----------------------------------------------------------------------------
 # 설정 / Configuration
 # -----------------------------------------------------------------------------
-# 공백 제거 (.strip()) 추가
 TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '').strip()
 TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID', '').strip()
 
@@ -37,7 +37,7 @@ BISTROS = [
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # -----------------------------------------------------------------------------
-# SSL Adapter (Legacy Support)
+# SSL Adapter
 # -----------------------------------------------------------------------------
 class LegacySSLAdapter(HTTPAdapter):
     def init_poolmanager(self, connections, maxsize, block=False):
@@ -56,17 +56,15 @@ class LegacySSLAdapter(HTTPAdapter):
 # -----------------------------------------------------------------------------
 def get_kst_now():
     """한국 시간(KST) 현재 시간 반환"""
+    # UTC -> KST (+9 hours)
     return datetime.datetime.utcnow() + datetime.timedelta(hours=9)
 
 def send_telegram_message(message):
     """텔레그램 메시지 전송"""
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-        print("[Warn] 텔레그램 토큰이 없어 메시지를 출력만 합니다.")
+        print("[Info] 텔레그램 토큰이 없어 메시지를 출력만 합니다.")
         print("---------------------------------------------------")
-        try:
-            print(message)
-        except UnicodeEncodeError:
-            print(message.encode(sys.stdout.encoding, errors='replace').decode(sys.stdout.encoding))
+        print(message)
         print("---------------------------------------------------")
         return
 
@@ -74,7 +72,6 @@ def send_telegram_message(message):
     payload = {
         'chat_id': TELEGRAM_CHAT_ID,
         'text': message
-        # 'parse_mode': 'HTML'  <-- 에러 방지를 위해 제거
     }
     try:
         response = requests.post(url, json=payload, timeout=10)
@@ -82,17 +79,14 @@ def send_telegram_message(message):
         print("텔레그램 메시지 전송 성공")
     except Exception as e:
         print(f"텔레그램 메시지 전송 실패: {e}")
-        # 진짜 에러 원인 출력 (중요)
         if 'response' in locals():
             print(f"응답 내용: {response.text}")
-        
-        # GitHub Actions에서 실패로 표시되도록 에러 코드 반환
         sys.exit(1)
 
 def get_menu_data(seq):
-    """API를 통해 특정 식당의 이번 주 식단 데이터를 가져옴"""
-    # KST 기준 날짜 계산
+    """API를 통해 특정 식당의 주간 식단 데이터를 가져옴"""
     today = get_kst_now().date()
+    # 이번주 월요일, 금요일 계산
     monday = today - datetime.timedelta(days=today.weekday())
     friday = monday + datetime.timedelta(days=6)
     
@@ -105,16 +99,20 @@ def get_menu_data(seq):
         'START_DAY': start_day_str,
         'END_DAY': end_day_str
     }
+
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+    }
     
     session = requests.Session()
     session.mount('https://', LegacySSLAdapter())
     
     try:
-        response = session.post(API_URL, data=payload, verify=False, timeout=20)
+        response = session.post(API_URL, data=payload, headers=headers, verify=False, timeout=20)
         response.raise_for_status()
         return response.json()
     except Exception as e:
-        print(f"API 호출 실패 (SEQ {seq}): {e}")
+        print(f"[{seq}] API 호출 실패: {e}")
         return None
 
 def format_menu(menu_item):
@@ -122,6 +120,7 @@ def format_menu(menu_item):
     message_lines = []
     found_any = False
     
+    # CARTE1 ~ CARTE6 까지 순회
     for i in range(1, 7):
         nm_key = f'CARTE{i}_NM'
         cont_key = f'CARTE{i}_CONT'
@@ -129,22 +128,20 @@ def format_menu(menu_item):
         title = (menu_item.get(nm_key) or '').strip()
         content = (menu_item.get(cont_key) or '').strip()
         
-        if title:
+        if title or content:
             found_any = True
-            # HTML 특수문자 이스케이프 (텔레그램 API 오류 방지)
-            safe_title = html.escape(title)
-            safe_content = html.escape(content)
-            
-            # HTML 태그 제거 및 텍스트만 사용
-            message_lines.append(f"🔸 {title}")
+            if title:
+                message_lines.append(f"🔸 {title}")
             if content:
+                # 줄바꿈 처리 등
+                content = content.replace('\r\n', '\n')
                 message_lines.append(content)
             message_lines.append("")
             
     if not found_any:
         return "🍽 등록된 메뉴가 없습니다."
         
-    return "\n".join(message_lines)
+    return "\n".join(message_lines).strip()
 
 def main():
     print("학교 식단 크롤러 시작")
@@ -154,7 +151,7 @@ def main():
     display_date = kst_now.strftime("%Y년 %m월 %d일 (%a)")
     
     final_message = f"🍱 신구대학교 오늘의 학식\n{display_date}\n\n"
-
+    
     for bistro in BISTROS:
         bistro_name = bistro['name']
         bistro_seq = bistro['seq']
@@ -172,10 +169,11 @@ def main():
             elif isinstance(json_data, list):
                 items = json_data
             
-            # 오늘 메뉴 찾기
+            # 오늘 날짜에 해당하는 아이템 찾기
             todays_item = None
             for item in items:
                 item_date = item.get('STD_DT')
+                # YYYY.MM.DD 등 다양한 형식 대응을 위한 방어 코드
                 if not item_date:
                     ym = item.get('STD_YM', '').replace('.', '')
                     dd = item.get('STD_DD', '')
@@ -194,9 +192,8 @@ def main():
         final_message += f"{bistro_icon} {bistro_name}\n"
         final_message += f"{menu_content}\n"
         final_message += "━━━━━━━━━━━━━━━\n\n"
-
+    
     send_telegram_message(final_message.strip())
 
 if __name__ == "__main__":
     main()
-

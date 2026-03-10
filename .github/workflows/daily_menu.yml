@@ -2,9 +2,9 @@ name: Daily School Lunch Notification
 
 on:
   schedule:
-    # UTC 21:00 (Sun-Thu) -> KST 06:00 (Mon-Fri)
-    # Runs at 06:00 AM KST on Monday through Friday
-    - cron: '0 21 * * 0-4'
+    # UTC 00:00 (Mon-Fri) -> KST 09:00 (Mon-Fri)
+    # Runs at 09:00 AM KST on Monday through Friday
+    - cron: '0 0 * * 1-5'
   workflow_dispatch: # Allows manual run from GitHub UI
 
 jobs:

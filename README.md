@@ -19,8 +19,8 @@
 
 | Name | Secret (값) | 설명 |
 |---|---|---|
-| `TELEGRAM_BOT_TOKEN` | `8212219580:AAHHRhpSSfyX9uGY3UV0RQAyP9_Az0KFiZs` | 내 봇의 비밀 키 |
-| `TELEGRAM_CHAT_ID` | `7203474705` | 내 봇 채팅방 ID |
+| `TELEGRAM_BOT_TOKEN` | `8861784536:AAHtjCgRWUP4-p2ehQbW9S1eFN9UVN0m_AQ` | 내 봇의 비밀 키 |
+| `TELEGRAM_CHAT_ID` | `8872292858` | 내 봇 채팅방 ID |
 
 > **주의**: 값 앞뒤에 공백이 들어가지 않도록 주의해주세요.
 

@@ -1,11 +1,11 @@
 name: Daily School Lunch Notification
 
 on:
-  schedule:
-    # UTC 23:15 (Sun-Thu) -> KST 08:15 (Mon-Fri)
-    # Runs at 08:15 AM KST on Monday through Friday
-    - cron: '15 23 * * 0-4'
-  workflow_dispatch: # Allows manual run from GitHub UI
+  # 외부 스케줄러(cron-job.org 등)에서 workflow_dispatch로 정시 실행하도록 변경
+  # (중복 알림 방지를 위해 GitHub 자체 schedule 비활성화)
+  # schedule:
+  #   - cron: '15 23 * * 0-4'
+  workflow_dispatch: # Allows manual/API run from GitHub UI or external scheduler
 
 jobs:
   send-menu:
